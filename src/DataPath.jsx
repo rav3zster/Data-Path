@@ -7,11 +7,14 @@ import {
   Calendar,
 } from "lucide-react";
 import { storage } from "./storage.js";
+import { Capacitor } from "@capacitor/core";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const TODAY = new Date().toISOString().split("T")[0];
 const addDays = (d, n) => { const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() + n); return x.toISOString().split("T")[0]; };
 const daysBetween = (a, b) => Math.max(0, Math.floor((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000));
+// Signed day difference (can be negative) — needed to detect dates outside the 84-day plan.
+const dayDiff = (a, b) => Math.floor((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000);
 const fmtShort = d => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short" });
 const fmtFull = d => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const fmtWeekday = d => new Date(d + "T00:00:00").toLocaleDateString("en-IN", { weekday: "short" });
@@ -174,15 +177,69 @@ const RESOURCES = [
 
 // ─── storage key ──────────────────────────────────────────────────────────────
 const SK = "datapath_raveend_v1";
-const DEF_STATE = { completed: {}, startDate: TODAY, customBlocks: {}, scheduleNotes: {} };
+const DEF_STATE = { completed: {}, startDate: TODAY, customBlocks: {}, scheduleNotes: {}, theme: DEFAULT_THEME };
+
+// ─── themes ───────────────────────────────────────────────────────────────────
+// Accent hues (teal/purple/coral/amber) match the four phase colors and stay
+// consistent across themes; each theme varies the surface + text tones.
+const THEMES = {
+  midnight: {
+    label: "Midnight", dark: true, swatch: ["#070b14", "#22d3a5"],
+    bg: "#070b14", surf: "#0d1321", surf2: "#111827", surf3: "#1a2540",
+    navBg: "rgba(13,19,33,0.92)", onAccent: "#070b14",
+    bdr: "rgba(148,163,184,0.07)", bdr2: "rgba(148,163,184,0.13)",
+    txt: "#f1f5f9", txt2: "#94a3b8", txt3: "#475569",
+    teal: "#22d3a5", purple: "#8b7cf8", coral: "#f87171", amber: "#fb923c",
+  },
+  carbon: {
+    label: "Carbon", dark: true, swatch: ["#0a0a0b", "#22d3a5"],
+    bg: "#0a0a0b", surf: "#151517", surf2: "#1d1d20", surf3: "#29292e",
+    navBg: "rgba(21,21,23,0.92)", onAccent: "#0a0a0b",
+    bdr: "rgba(255,255,255,0.06)", bdr2: "rgba(255,255,255,0.12)",
+    txt: "#fafafa", txt2: "#a1a1aa", txt3: "#5b5b63",
+    teal: "#22d3a5", purple: "#8b7cf8", coral: "#f87171", amber: "#fb923c",
+  },
+  ocean: {
+    label: "Ocean", dark: true, swatch: ["#04141f", "#38bdf8"],
+    bg: "#04141f", surf: "#0a2433", surf2: "#0e2e40", surf3: "#16435c",
+    navBg: "rgba(10,36,51,0.92)", onAccent: "#04141f",
+    bdr: "rgba(125,211,252,0.08)", bdr2: "rgba(125,211,252,0.16)",
+    txt: "#ecfeff", txt2: "#94b8c9", txt3: "#4b6b7d",
+    teal: "#22d3a5", purple: "#8b7cf8", coral: "#f87171", amber: "#fb923c",
+  },
+  plum: {
+    label: "Plum", dark: true, swatch: ["#120a1f", "#c084fc"],
+    bg: "#120a1f", surf: "#1c1030", surf2: "#251640", surf3: "#34215a",
+    navBg: "rgba(28,16,48,0.92)", onAccent: "#120a1f",
+    bdr: "rgba(192,132,252,0.08)", bdr2: "rgba(192,132,252,0.16)",
+    txt: "#faf5ff", txt2: "#b8a9cf", txt3: "#6b5b85",
+    teal: "#22d3a5", purple: "#a78bfa", coral: "#f87171", amber: "#fb923c",
+  },
+  forest: {
+    label: "Forest", dark: true, swatch: ["#08140f", "#34d399"],
+    bg: "#08140f", surf: "#0e1f17", surf2: "#142a20", surf3: "#1d3d2e",
+    navBg: "rgba(14,31,23,0.92)", onAccent: "#08140f",
+    bdr: "rgba(134,239,172,0.07)", bdr2: "rgba(134,239,172,0.14)",
+    txt: "#f0fdf4", txt2: "#9bb5a6", txt3: "#4d6b58",
+    teal: "#22d3a5", purple: "#8b7cf8", coral: "#f87171", amber: "#fb923c",
+  },
+  daylight: {
+    label: "Daylight", dark: false, swatch: ["#ffffff", "#0d9488"],
+    bg: "#eef2f7", surf: "#ffffff", surf2: "#f1f5f9", surf3: "#e2e8f0",
+    navBg: "rgba(255,255,255,0.92)", onAccent: "#ffffff",
+    bdr: "rgba(15,23,42,0.08)", bdr2: "rgba(15,23,42,0.16)",
+    txt: "#0f172a", txt2: "#475569", txt3: "#94a3b8",
+    teal: "#0d9488", purple: "#7c5cf0", coral: "#e11d48", amber: "#d97706",
+  },
+};
+const THEME_LIST = Object.entries(THEMES).map(([id, t]) => ({ id, label: t.label, swatch: t.swatch, dark: t.dark }));
+const DEFAULT_THEME = "midnight";
 
 // ─── style constants ────────────────────────────────────────────────────────
-const C = {
-  bg: "#070b14", surf: "#0d1321", surf2: "#111827", surf3: "#1a2540",
-  bdr: "rgba(148,163,184,0.07)", bdr2: "rgba(148,163,184,0.13)",
-  txt: "#f1f5f9", txt2: "#94a3b8", txt3: "#475569",
-  teal: "#22d3a5", purple: "#8b7cf8", coral: "#f87171", amber: "#fb923c",
-};
+// `C` is the active palette. It is reassigned to the selected theme at the top
+// of each render, so the shared components below (which read C at render time)
+// always reflect the current theme.
+let C = THEMES[DEFAULT_THEME];
 
 // ─── reusable components ──────────────────────────────────────────────────────
 const Pbar = ({ val, color, h = 4 }) => (
@@ -202,7 +259,7 @@ const Tag = ({ children, color, bg }) => (
 );
 
 const Btn = ({ onClick, children, primary, small }) => (
-  <button onClick={onClick} style={{ background: primary ? C.teal : "transparent", border: `1px solid ${primary ? C.teal : C.bdr2}`, borderRadius: 8, padding: small ? "5px 11px" : "9px 16px", fontSize: small ? 11 : 12, color: primary ? "#070b14" : C.txt2, cursor: "pointer", fontWeight: primary ? 700 : 500, display: "inline-flex", alignItems: "center", gap: 4, transition: "all 0.15s", fontFamily: "inherit" }}>{children}</button>
+  <button onClick={onClick} style={{ background: primary ? C.teal : "transparent", border: `1px solid ${primary ? C.teal : C.bdr2}`, borderRadius: 8, padding: small ? "5px 11px" : "9px 16px", fontSize: small ? 11 : 12, color: primary ? (C.onAccent || "#070b14") : C.txt2, cursor: "pointer", fontWeight: primary ? 700 : 500, display: "inline-flex", alignItems: "center", gap: 4, transition: "all 0.15s", fontFamily: "inherit" }}>{children}</button>
 );
 
 // ─── main app ─────────────────────────────────────────────────────────────────
@@ -243,14 +300,35 @@ export default function DataPath() {
   const upd = useCallback((patch) => setSt(p => { const n = { ...p, ...patch }; save(n); return n; }), [save]);
   const toggle = useCallback((id) => setSt(p => { const n = { ...p, completed: { ...p.completed, [id]: !p.completed[id] } }; save(n); return n; }), [save]);
 
+  // Keep the page background, theme-color meta, and native status bar in sync with the theme.
+  useEffect(() => {
+    const th = THEMES[st.theme] || THEMES[DEFAULT_THEME];
+    document.documentElement.style.background = th.bg;
+    document.body.style.background = th.bg;
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) { meta = document.createElement("meta"); meta.name = "theme-color"; document.head.appendChild(meta); }
+    meta.content = th.surf;
+    if (Capacitor.isNativePlatform()) {
+      import("@capacitor/status-bar")
+        .then(({ StatusBar, Style }) => {
+          StatusBar.setStyle({ style: th.dark ? Style.Dark : Style.Light }).catch(() => {});
+          StatusBar.setBackgroundColor({ color: th.surf }).catch(() => {});
+        })
+        .catch(() => {});
+    }
+  }, [st.theme]);
+
   const { completed, startDate, customBlocks } = st;
+  // Apply the active theme. `C` is read at render time by the shared components
+  // and every page renderer, so reassigning it here re-skins the whole app.
+  C = THEMES[st.theme] || THEMES[DEFAULT_THEME];
   const doneCnt = useMemo(() => Object.values(completed).filter(Boolean).length, [completed]);
   const pct = Math.round(doneCnt / 84 * 100);
   const dayNum = useMemo(() => { const d = daysBetween(startDate, TODAY) + 1; return Math.min(Math.max(d, 1), 84); }, [startDate]);
   const curWeek = Math.ceil(dayNum / 7);
   const todayTasks = TASKS.filter(t => t.day === dayNum);
 
-  const selDayNum = useMemo(() => { const d = daysBetween(startDate, selDate) + 1; return (d >= 1 && d <= 84) ? d : null; }, [startDate, selDate]);
+  const selDayNum = useMemo(() => { const d = dayDiff(startDate, selDate) + 1; return (d >= 1 && d <= 84) ? d : null; }, [startDate, selDate]);
   const selDayTasks = useMemo(() => selDayNum ? TASKS.filter(t => t.day === selDayNum) : [], [selDayNum]);
   const dateBlocks = customBlocks[selDate] || [];
 
@@ -261,10 +339,18 @@ export default function DataPath() {
   }), [completed]);
 
   const streak = useMemo(() => {
+    // Count consecutive fully-completed days ending today.
+    // Today counts once it's done; an unfinished today doesn't break the streak
+    // (the day isn't over yet), so we start from yesterday in that case.
+    const isDayDone = (dn) => {
+      const dt = TASKS.filter(t => t.day === dn);
+      return dt.length > 0 && dt.every(t => completed[t.id]);
+    };
     let s = 0;
-    for (let i = dayNum - 2; i >= 0; i--) {
-      const dt = TASKS.filter(t => t.day === i + 1);
-      if (dt.length > 0 && dt.every(t => completed[t.id])) s++;
+    let start = dayNum;
+    if (!isDayDone(dayNum)) start = dayNum - 1; // today not finished yet — don't penalise
+    for (let dn = start; dn >= 1; dn--) {
+      if (isDayDone(dn)) s++;
       else break;
     }
     return s;
@@ -294,7 +380,7 @@ export default function DataPath() {
   }, [filteredTasks]);
 
   if (!loaded) return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: "#070b14", color: "#22d3a5", fontFamily: "monospace", fontSize: 14 }}>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", background: C.bg, color: C.teal, fontFamily: "monospace", fontSize: 14 }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>⚡</div>
         <div>Loading DataPath...</div>
@@ -333,18 +419,20 @@ export default function DataPath() {
     </div>
   );
 
-  // Bottom navigation bar (mobile) — replaces desktop sidebar nav
+  // Floating bottom navigation bar (mobile) — detached pill that hovers above content
   const BottomNav = () => (
-    <div style={{ position: "sticky", bottom: 0, zIndex: 50, background: C.surf, borderTop: `1px solid ${C.bdr}`, display: "flex", padding: "6px 4px calc(env(safe-area-inset-bottom, 0px) + 6px)" }}>
-      {navItems.map(({ id, label, Icon }) => {
-        const active = page === id;
-        return (
-          <div key={id} onClick={() => setPage(id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "6px 2px", borderRadius: 10, cursor: "pointer", color: active ? C.teal : C.txt3, background: active ? C.teal + "12" : "transparent", transition: "all 0.15s" }}>
-            <Icon size={19} />
-            <span style={{ fontSize: 9, fontWeight: active ? 700 : 500 }}>{label}</span>
-          </div>
-        );
-      })}
+    <div style={{ position: "fixed", left: 0, right: 0, bottom: "calc(env(safe-area-inset-bottom, 0px) + 14px)", zIndex: 50, display: "flex", justifyContent: "center", pointerEvents: "none", padding: "0 16px" }}>
+      <div style={{ display: "flex", width: "100%", maxWidth: 460, background: C.navBg, backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: `1px solid ${C.bdr2}`, borderRadius: 20, padding: "8px 6px", boxShadow: "0 8px 28px rgba(0,0,0,0.45)", pointerEvents: "auto" }}>
+        {navItems.map(({ id, label, Icon }) => {
+          const active = page === id;
+          return (
+            <div key={id} onClick={() => setPage(id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "6px 2px", borderRadius: 12, cursor: "pointer", color: active ? C.teal : C.txt3, background: active ? C.teal + "18" : "transparent", transition: "all 0.15s" }}>
+              <Icon size={19} />
+              <span style={{ fontSize: 9, fontWeight: active ? 700 : 500 }}>{label}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -361,6 +449,23 @@ export default function DataPath() {
           <input type="date" value={tempStart} onChange={e => setTempStart(e.target.value)} style={{ width: "100%", background: C.surf2, border: `1px solid ${C.bdr2}`, borderRadius: 8, padding: "10px 12px", color: C.txt, fontSize: 13, fontFamily: "inherit" }} />
           <div style={{ fontSize: 11, color: C.txt3, marginTop: 6 }}>Day 1 = {fmtShort(tempStart)} · Day 84 = {fmtShort(addDays(tempStart, 83))}</div>
         </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", fontSize: 11, color: C.txt3, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.08em" }}>Theme</label>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+            {THEME_LIST.map(t => {
+              const active = st.theme === t.id;
+              return (
+                <div key={t.id} onClick={() => upd({ theme: t.id })} style={{ cursor: "pointer", borderRadius: 10, padding: 8, background: active ? C.teal + "18" : C.surf2, border: `1.5px solid ${active ? C.teal : C.bdr}`, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, transition: "all 0.15s" }}>
+                  <div style={{ display: "flex", borderRadius: 7, overflow: "hidden", width: "100%", height: 28, border: `1px solid ${C.bdr2}` }}>
+                    <div style={{ flex: 1, background: t.swatch[0] }} />
+                    <div style={{ width: 14, background: t.swatch[1] }} />
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: active ? 700 : 500, color: active ? C.teal : C.txt2 }}>{t.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
         <div style={{ borderTop: `1px solid ${C.bdr}`, paddingTop: 14, marginBottom: 16 }}>
           <div style={{ fontSize: 11, color: C.txt3 }}>Started: {fmtShort(startDate)}</div>
           <div style={{ fontSize: 11, color: C.txt3, marginTop: 3 }}>Target: {fmtShort(addDays(startDate, 83))}</div>
@@ -375,7 +480,10 @@ export default function DataPath() {
 
   // ── DASHBOARD ─────────────────────────────────────────────────────────────────
   const renderDashboard = () => {
-    const curPhase = PHASES[Math.min(Math.ceil(curWeek / 3) - 1, 3)];
+    // Derive the current phase from the actual task data for this week.
+    // (Phases are not evenly sized: 2 / 2 / 4 / 4 weeks, so a fixed formula is wrong.)
+    const curPhaseId = TASKS.find(t => t.week === curWeek)?.phase ?? 1;
+    const curPhase = PHASES.find(p => p.id === curPhaseId) || PHASES[0];
     return (
       <div style={{ padding: "20px 16px 24px", maxWidth: 680, margin: "0 auto" }}>
         <div style={{ marginBottom: 24 }}>
@@ -645,8 +753,9 @@ export default function DataPath() {
             {weekDates.map(d => {
               const isToday = d === TODAY;
               const isSel = d === selDate;
-              const dNum = daysBetween(startDate, d) + 1;
-              const dTasks = TASKS.filter(t => t.day === dNum);
+              const dNum = dayDiff(startDate, d) + 1;
+              const inPlan = dNum >= 1 && dNum <= 84;
+              const dTasks = inPlan ? TASKS.filter(t => t.day === dNum) : [];
               const dDone = dTasks.filter(t => completed[t.id]).length;
               const hasAll = dTasks.length > 0 && dDone === dTasks.length;
               return (
@@ -737,8 +846,8 @@ export default function DataPath() {
     // Recent activity — last 28 days
     const recentDays = Array.from({ length: 28 }, (_, i) => {
       const d = addDays(TODAY, -(27 - i));
-      const dn = daysBetween(startDate, d) + 1;
-      const dt = TASKS.filter(t => t.day === dn);
+      const dn = dayDiff(startDate, d) + 1;
+      const dt = (dn >= 1 && dn <= 84) ? TASKS.filter(t => t.day === dn) : [];
       const dd = dt.filter(t => completed[t.id]).length;
       return { date: d, tasks: dt.length, done: dd };
     });
@@ -877,12 +986,12 @@ export default function DataPath() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", background: C.bg, minHeight: "100vh", height: "100vh", fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", color: C.txt }}>
-      <TopBar />
-      <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+      {TopBar()}
+      <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 88px)" }}>
         {(pageMap[page] || renderDashboard)()}
       </main>
-      <BottomNav />
-      {showSettings && <SettingsModal />}
+      {BottomNav()}
+      {showSettings && SettingsModal()}
     </div>
   );
 }
