@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DataPath</string>
+    <string name="title_activity_main">DataPath</string>
+    <string name="package_name">com.raveend.datapath</string>
+    <string name="custom_url_scheme">com.raveend.datapath</string>
+</resources>

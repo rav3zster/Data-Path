@@ -1,0 +1,9 @@
+{
+  "appId": "com.raveend.datapath",
+  "appName": "DataPath",
+  "webDir": "dist",
+  "backgroundColor": "#070b14",
+  "android": {
+    "backgroundColor": "#070b14"
+  }
+}
