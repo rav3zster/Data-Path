@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { LayoutDashboard, Map, CheckSquare, CalendarDays, BarChart3, CheckCircle2, Clock, ExternalLink, Plus, X, ChevronDown, ChevronRight, Target, ArrowRight, BookOpen, Settings, Calendar, Code2, Search, Zap, Award, Brain, Timer, Sun, Moon, Star, Trophy, Bookmark, Flag, TrendingUp, RefreshCw, Download, Github, Menu } from "lucide-react";
 
+
 const TODAY = new Date().toISOString().split("T")[0];
 const addD = (d, n) => { const x = new Date(d + "T00:00:00"); x.setDate(x.getDate() + n); return x.toISOString().split("T")[0] };
 const diffD = (a, b) => Math.max(0, Math.floor((new Date(b + "T00:00:00") - new Date(a + "T00:00:00")) / 86400000));
@@ -395,6 +396,7 @@ const DEF = {
     weekly_goals: {},
     time_log: {},
     pom_total: 0,
+    pom_auto_log: false,
     github_user: "rav3zster",
 };
 
@@ -409,6 +411,7 @@ export default function DevPath() {
     const [filterWk, setFilterWk] = useState(0);
     const [openPhase, setOpenPhase] = useState(null);
     const [expandTask, setExpandTask] = useState(null);
+    const [tempPomLog, setTempPomLog] = useState(false);
 
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -469,19 +472,62 @@ export default function DevPath() {
     }, []);
 
     useEffect(() => {
-        (async () => {
-            try { const r = await window.storage.get(SK); if (r) { const d = JSON.parse(r.value); setSt({ ...DEF, ...d }); setTempDa(d.da_startDate || TODAY); setTempDsa(d.dsa_startDate || TODAY); setTempMode(d.mode || "both"); setTempGithub(d.github_user || "rav3zster"); setJournalDate(TODAY); } } catch { }
-            setLoaded(true);
-        })();
+        try {
+            const raw = localStorage.getItem(SK);
+            if (raw) {
+                const d = JSON.parse(raw);
+                setSt({ ...DEF, ...d });
+                setTempDa(d.da_startDate || TODAY);
+                setTempDsa(d.dsa_startDate || TODAY);
+                setTempMode(d.mode || "both");
+                setTempGithub(d.github_user || "rav3zster");
+                setTempPomLog(d.pom_auto_log || false);
+                setJournalDate(TODAY);
+            }
+        } catch { }
+        setLoaded(true);
     }, []);
 
     useEffect(() => { setExpandTask(null); setFilterPh(0); setFilterWk(0); setSearch(""); setDiffFilt("All"); setQacat("All"); setQadiff("All"); setQaopen(null); setBmtag("All"); }, [st.section]);
 
+    // Define save and upd early so they can be used in useEffect dependency arrays
+    const save = useCallback(ns => { try { localStorage.setItem(SK, JSON.stringify(ns)); } catch { } }, []);
+    const upd = useCallback(patch => setSt(p => { const n = { ...p, ...patch }; save(n); return n; }), [save]);
+
+    const pomTaskRef = useRef(pomTask);
+    const pomAutoLogRef = useRef(st.pom_auto_log);
+    useEffect(() => { pomTaskRef.current = pomTask; }, [pomTask]);
+    useEffect(() => { pomAutoLogRef.current = st.pom_auto_log; }, [st.pom_auto_log]);
+
     // Pomodoro timer
     useEffect(() => {
-        if (pomRunning) { pomRef.current = setInterval(() => { setPomTime(t => { if (t <= 1) { clearInterval(pomRef.current); setPomRunning(false); upd({ pom_total: (st.pom_total || 0) + 1 }); setPomTime(pomMode * 60); return pomMode * 60; } return t - 1; }); }, 1000); }
+        if (pomRunning) {
+            pomRef.current = setInterval(() => {
+                setPomTime(t => {
+                    if (t <= 1) {
+                        clearInterval(pomRef.current);
+                        setPomRunning(false);
+                        setSt(p => {
+                            const newPomTotal = (p.pom_total || 0) + 1;
+                            const n = { ...p, pom_total: newPomTotal };
+                            if (pomAutoLogRef.current) {
+                                const key = TODAY;
+                                const existing = p.time_log[key] || [];
+                                const taskName = pomTaskRef.current.trim() || "Pomodoro Session";
+                                const entry = { id: Date.now(), task: taskName, time: parseFloat((pomMode / 60).toFixed(2)), ts: Date.now() };
+                                n.time_log = { ...p.time_log, [key]: [...existing, entry] };
+                            }
+                            save(n);
+                            return n;
+                        });
+                        return pomMode * 60;
+                    }
+                    return t - 1;
+                });
+            }, 1000);
+        }
         return () => clearInterval(pomRef.current);
-    }, [pomRunning, pomMode]);
+    }, [pomRunning, pomMode, save]);
 
     // Mock timer
     useEffect(() => {
@@ -489,8 +535,37 @@ export default function DevPath() {
         return () => clearInterval(mockRef.current);
     }, [mockRunning]);
 
-    const save = useCallback(ns => { try { window.storage.set(SK, JSON.stringify(ns)); } catch { } }, []);
-    const upd = useCallback(patch => setSt(p => { const n = { ...p, ...patch }; save(n); return n; }), [save]);
+    const openSettings = () => {
+        setTempMode(st.mode || "both");
+        setTempDa(st.da_startDate || TODAY);
+        setTempDsa(st.dsa_startDate || TODAY);
+        setTempGithub(st.github_user || "rav3zster");
+        setTempPomLog(st.pom_auto_log || false);
+        setShowSettings(true);
+    };
+
+    const handlePomReset = () => {
+        setPomRunning(false);
+        const timeSpent = pomMode * 60 - pomTime;
+        if (st.pom_auto_log && timeSpent >= 60) {
+            const mins = Math.floor(timeSpent / 60);
+            const hours = parseFloat((timeSpent / 3600).toFixed(2));
+            const taskName = pomTask.trim() || "Pomodoro Session";
+            const confirmLog = window.confirm(`You spent ${mins} min on "${taskName}". Would you like to log this to your Time Log before resetting?`);
+            if (confirmLog) {
+                setSt(p => {
+                    const key = TODAY;
+                    const existing = p.time_log[key] || [];
+                    const entry = { id: Date.now(), task: taskName, time: hours, ts: Date.now() };
+                    const n = { ...p, time_log: { ...p.time_log, [key]: [...existing, entry] } };
+                    save(n);
+                    return n;
+                });
+            }
+        }
+        setPomTime(pomMode * 60);
+    };
+
     const toggle = useCallback((id, s) => {
         const sec = s || st.section;
         if (sec === "dsa") upd({ dsa_completed: { ...st.dsa_completed, [id]: !st.dsa_completed[id] } });
@@ -649,7 +724,7 @@ export default function DevPath() {
         <div style={{ padding: "8px 6px 8px", borderTop: `1px solid ${C.bdr}` }}>
             <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
                 <div onClick={() => upd({ theme: isDark ? "light" : "dark" })} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "5px", borderRadius: 8, cursor: "pointer", background: C.surf2, color: C.txt2, fontSize: 10 }}>{isDark ? <Sun size={11} /> : <Moon size={11} />}{isDark ? "Light" : "Dark"}</div>
-                <div onClick={() => { setShowSettings(true); if (isMobile) setDrawerOpen(false); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "5px", borderRadius: 8, cursor: "pointer", background: C.surf2, color: C.txt2, fontSize: 10 }}><Settings size={11} />Settings</div>
+                <div onClick={() => { openSettings(); if (isMobile) setDrawerOpen(false); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "5px", borderRadius: 8, cursor: "pointer", background: C.surf2, color: C.txt2, fontSize: 10 }}><Settings size={11} />Settings</div>
             </div>
             <div style={{ fontSize: 9, color: C.txt3, padding: "0 4px", lineHeight: 1.8 }}>Started: {fmtS(startDate)}<br />Target: {fmtS(addD(startDate, 83))}</div>
         </div>
@@ -677,12 +752,29 @@ export default function DevPath() {
                 <label style={{ display: "block", fontSize: 10, color: C.txt3, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 5 }}>GitHub Username</label>
                 <input value={tempGithub} onChange={e => setTempGithub(e.target.value)} placeholder="rav3zster" style={{ width: "100%", background: C.surf2, border: `1px solid ${C.bdr2}`, borderRadius: 8, padding: "7px 12px", color: C.txt, fontSize: 12, fontFamily: "inherit", outline: "none" }} />
             </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", margin: "14px 0 6px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <label style={{ fontSize: 10, fontWeight: 600, color: C.txt3, textTransform: "uppercase", letterSpacing: ".08em", margin: 0 }}>Auto-Log Pomodoro</label>
+                    <div 
+                        title="When enabled, completed Pomodoro sessions are automatically added to your daily Time Log. Resetted sessions will offer an option to log partial time." 
+                        style={{ cursor: "help", display: "flex", alignItems: "center", justifyContent: "center", width: 14, height: 14, borderRadius: "50%", background: C.surf3, color: C.txt2, fontSize: 9, fontWeight: 700 }}
+                    >
+                        ?
+                    </div>
+                </div>
+                <input 
+                    type="checkbox" 
+                    checked={tempPomLog} 
+                    onChange={e => setTempPomLog(e.target.checked)} 
+                    style={{ width: 16, height: 16, cursor: "pointer", accentColor: ac }} 
+                />
+            </div>
             <div style={{ height: 1, background: C.bdr, margin: "14px 0" }} />
             <SecLabel>Export Progress</SecLabel>
             <button onClick={() => { const data = { progress: { da_pct: daPct, dsa_pct: dsaPct, da_done: daTotalDone, dsa_done: dsaTotalDone, streak, achievements: unlockedAch.map(a => a.title), points: totalPts }, date: TODAY }; const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "devpath_progress.json"; a.click(); }} style={{ width: "100%", background: C.surf2, border: `1px solid ${C.bdr2}`, borderRadius: 8, padding: "8px 12px", color: C.txt2, fontSize: 12, fontFamily: "inherit", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 14 }}><Download size={13} />Export Progress as JSON</button>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
                 <Btn onClick={() => setShowSettings(false)}>Cancel</Btn>
-                <Btn primary onClick={() => { const ns = { ...st, mode: tempMode, da_startDate: tempDa, dsa_startDate: tempDsa, github_user: tempGithub }; if (tempMode === "da") ns.section = "da"; if (tempMode === "dsa") ns.section = "dsa"; setSt(ns); save(ns); setPage(ns.section === "da" ? "dashboard" : "dsa_dash"); setShowSettings(false); }}>Save Changes</Btn>
+                <Btn primary onClick={() => { const ns = { ...st, mode: tempMode, da_startDate: tempDa, dsa_startDate: tempDsa, github_user: tempGithub, pom_auto_log: tempPomLog }; if (tempMode === "da") ns.section = "da"; if (tempMode === "dsa") ns.section = "dsa"; setSt(ns); save(ns); setPage(ns.section === "da" ? "dashboard" : "dsa_dash"); setShowSettings(false); }}>Save Changes</Btn>
             </div>
         </div>
     </div>;
@@ -810,7 +902,7 @@ export default function DevPath() {
                 <input value={pomTask} onChange={e => setPomTask(e.target.value)} placeholder="What are you working on? (optional)" style={{ width: "100%", background: C.surf2, border: `1px solid ${C.bdr2}`, borderRadius: 8, padding: "8px 12px", color: C.txt, fontSize: 12, fontFamily: "inherit", outline: "none", marginBottom: 12, textAlign: "center" }} />
                 <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                     <Btn primary onClick={() => setPomRunning(!pomRunning)}>{pomRunning ? "⏸ Pause" : "▶ Start"}</Btn>
-                    <Btn onClick={() => { setPomRunning(false); setPomTime(pomMode * 60); }}>↺ Reset</Btn>
+                    <Btn onClick={handlePomReset}>↺ Reset</Btn>
                 </div>
             </Card>
             <Card>
