@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { LayoutDashboard, Map, CheckSquare, CalendarDays, BarChart3, CheckCircle2, Clock, ExternalLink, Plus, X, ChevronDown, ChevronRight, Target, ArrowRight, BookOpen, Settings, Calendar, Code2, Search, Zap, Award, Brain, Timer, Sun, Moon, Star, Trophy, Bookmark, Flag, TrendingUp, RefreshCw, Download, Github, Menu } from "lucide-react";
+import { LayoutDashboard, Map, CheckSquare, CalendarDays, BarChart3, CheckCircle2, Clock, ExternalLink, Plus, X, ChevronDown, ChevronLeft, ChevronRight, Target, ArrowRight, BookOpen, Settings, Calendar, Code2, Search, Zap, Award, Brain, Timer, Sun, Moon, Star, Trophy, Bookmark, Flag, TrendingUp, RefreshCw, Download, Github, Menu } from "lucide-react";
 import { storage } from "./storage.js";
 
 
@@ -409,6 +409,10 @@ export default function DevPath() {
     const getBreakpoint = w => w < 480 ? "xs" : w < 768 ? "sm" : w < 1024 ? "md" : w < 1280 ? "lg" : "xl";
     const [bp, setBp] = useState(() => getBreakpoint(window.innerWidth));
     const [drawerOpen, setDrawerOpen] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        const initialBp = getBreakpoint(window.innerWidth);
+        return initialBp === "lg" || initialBp === "md" || initialBp === "sm";
+    });
     const [selDate, setSelDate] = useState(TODAY);
     const [filterPh, setFilterPh] = useState(0);
     const [filterWk, setFilterWk] = useState(0);
@@ -588,8 +592,9 @@ export default function DevPath() {
     const isTablet = bp === "md";                         // tablet portrait, Fold unfolded (768–1023px)
     const isLargeTablet = bp === "lg" || bp === "xl";   // large tablets, Tab Ultra (1024px+)
     const isMobile = isPhone;                             // backward-compat alias
-    const sidebarIcons = isTablet;                       // 64px icon-only collapsed sidebar
-    const sidebarHidden = isPhone;                       // hidden behind hamburger drawer
+    const isCompact = bp === "xs" || bp === "sm" || bp === "md"; // screens <1024px (phones + portrait tablets)
+    const sidebarHidden = isCompact;                      // drawer style on compact screens
+    const sidebarIcons = !sidebarHidden && sidebarCollapsed; // Collapsed persistent sidebar
     // Responsive helpers
     const cols = (ph, tab, lg) => isPhone ? ph : isTablet ? tab : lg;
     const contentMaxW = isPhone ? "100%" : isTablet ? 820 : 1040;
@@ -699,13 +704,14 @@ export default function DevPath() {
     const navDSA = [{ id: "dsa_dash", label: "Dashboard", Icon: LayoutDashboard }, { id: "dsa_road", label: "Roadmap", Icon: Map }, { id: "dsa_probs", label: "Problems", Icon: Code2 }, { id: "dsa_sched", label: "Schedule", Icon: CalendarDays }, { id: "dsa_prog", label: "Progress", Icon: BarChart3 }, { id: "dsa_res", label: "Resources", Icon: BookOpen }, { id: "flashcards", label: "Flashcards", Icon: Brain }, { id: "interview_qa", label: "Interview Q&A", Icon: Flag }, { id: "patterns", label: "DS Patterns", Icon: Brain }, { id: "pomodoro", label: "Pomodoro", Icon: Timer }, { id: "goals", label: "Weekly Goals", Icon: Target }, { id: "time_log", label: "Time Log", Icon: Clock }, { id: "journal", label: "Journal", Icon: Calendar }, { id: "achievements", label: "Achievements", Icon: Trophy }, { id: "bookmarks", label: "Bookmarks", Icon: Bookmark }, { id: "mock_interview", label: "Mock Interview", Icon: Zap }];
 
     const Sidebar = () => {
-        const navW = sidebarHidden ? 0 : sidebarIcons ? 64 : 220;
+        const navW = sidebarIcons ? 64 : 220;
+        const actualWidth = sidebarHidden ? 220 : navW;
         return <div style={{
-            width: navW, minWidth: navW, background: C.surf, borderRight: `1px solid ${C.bdr}`,
+            width: actualWidth, minWidth: actualWidth, background: C.surf, borderRight: `1px solid ${C.bdr}`,
             display: "flex", flexDirection: "column", flexShrink: 0, height: "100vh", overflowY: "auto",
             position: sidebarHidden ? "fixed" : "sticky", top: 0, left: 0, bottom: 0, zIndex: 1000,
             transform: sidebarHidden ? (drawerOpen ? "translateX(0)" : "translateX(-100%)") : "none",
-            transition: "transform 0.3s cubic-bezier(0.4,0,0.2,1)",
+            transition: "transform 0.3s cubic-bezier(0.4,0,0.2,1), width 0.3s, min-width 0.3s",
             boxShadow: sidebarHidden && drawerOpen ? "5px 0 25px rgba(0,0,0,0.4)" : "none",
         }}>
             {/* ── Logo ── */}
@@ -750,6 +756,25 @@ export default function DevPath() {
                     </div>
                     <div style={{ fontSize: 9, color: C.txt3, padding: "0 4px", lineHeight: 1.8 }}>Started: {fmtS(startDate)}<br />Target: {fmtS(addD(startDate, 83))}</div>
                 </div>}
+            {/* ── Collapse/Expand persistent sidebar ── */}
+            {!sidebarHidden && (
+                <div onClick={() => setSidebarCollapsed(!sidebarCollapsed)} style={{ 
+                    display: "flex", 
+                    alignItems: "center", 
+                    justifyContent: sidebarIcons ? "center" : "space-between", 
+                    padding: sidebarIcons ? "10px 0" : "8px 14px", 
+                    borderTop: `1px solid ${C.bdr}`, 
+                    cursor: "pointer", 
+                    color: C.txt2,
+                    fontSize: 11,
+                    fontWeight: 500,
+                    background: C.surf2 + "40",
+                    transition: "background 0.2s"
+                }} onMouseEnter={e => e.currentTarget.style.background = C.surf2 + "80"} onMouseLeave={e => e.currentTarget.style.background = C.surf2 + "40"}>
+                    {!sidebarIcons && <span>Collapse Sidebar</span>}
+                    {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                </div>
+            )}
         </div>;
     };
 
@@ -1550,9 +1575,9 @@ export default function DevPath() {
     };
 
     return (
-        <div style={{ display: "flex", flexDirection: isPhone ? "column" : "row", background: C.bg, minHeight: "100vh", fontFamily: font, color: C.txt }}>
-            {isPhone && <MobileHeader />}
-            {isPhone && drawerOpen && (
+        <div style={{ display: "flex", flexDirection: isCompact ? "column" : "row", background: C.bg, minHeight: "100vh", fontFamily: font, color: C.txt }}>
+            {isCompact && <MobileHeader />}
+            {isCompact && drawerOpen && (
                 <div
                     style={{
                         position: "fixed",
