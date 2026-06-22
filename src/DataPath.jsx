@@ -405,7 +405,9 @@ export default function DevPath() {
     const [st, setSt] = useState(DEF);
     const [page, setPage] = useState("dashboard");
     const [loaded, setLoaded] = useState(false);
-    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+    // 5-point breakpoint: xs<480 (Z Flip / small phone) | sm<768 (phone) | md<1024 (tablet portrait / Fold unfolded) | lg<1280 (Tab S10+ / large tablet portrait) | xl≥1280 (Tab Ultra / landscape tablet)
+    const getBreakpoint = w => w < 480 ? "xs" : w < 768 ? "sm" : w < 1024 ? "md" : w < 1280 ? "lg" : "xl";
+    const [bp, setBp] = useState(() => getBreakpoint(window.innerWidth));
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [selDate, setSelDate] = useState(TODAY);
     const [filterPh, setFilterPh] = useState(0);
@@ -415,7 +417,7 @@ export default function DevPath() {
     const [tempPomLog, setTempPomLog] = useState(false);
 
     useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        const handleResize = () => setBp(getBreakpoint(window.innerWidth));
         window.addEventListener("resize", handleResize);
         return () => window.removeEventListener("resize", handleResize);
     }, []);
@@ -581,6 +583,16 @@ export default function DevPath() {
     }, [st, upd]);
 
     const sec = st.section, isDSA = sec === "dsa";
+    // Derived breakpoint flags
+    const isPhone = bp === "xs" || bp === "sm";          // phones, Z Flip open (<768px)
+    const isTablet = bp === "md";                         // tablet portrait, Fold unfolded (768–1023px)
+    const isLargeTablet = bp === "lg" || bp === "xl";   // large tablets, Tab Ultra (1024px+)
+    const isMobile = isPhone;                             // backward-compat alias
+    const sidebarIcons = isTablet;                       // 64px icon-only collapsed sidebar
+    const sidebarHidden = isPhone;                       // hidden behind hamburger drawer
+    // Responsive helpers
+    const cols = (ph, tab, lg) => isPhone ? ph : isTablet ? tab : lg;
+    const contentMaxW = isPhone ? "100%" : isTablet ? 820 : 1040;
     const isDark = st.theme !== "light";
     const tasks = isDSA ? DSA_TASKS : DA_TASKS;
     const completed = isDSA ? st.dsa_completed : st.da_completed;
@@ -686,57 +698,60 @@ export default function DevPath() {
     const navDA = [{ id: "dashboard", label: "Dashboard", Icon: LayoutDashboard }, { id: "roadmap", label: "Roadmap", Icon: Map }, { id: "tasks", label: "Tasks", Icon: CheckSquare }, { id: "schedule", label: "Schedule", Icon: CalendarDays }, { id: "progress", label: "Progress", Icon: BarChart3 }, { id: "resources", label: "Resources", Icon: BookOpen }, { id: "flashcards", label: "Flashcards", Icon: Brain }, { id: "interview_qa", label: "Interview Q&A", Icon: Flag }, { id: "pomodoro", label: "Pomodoro", Icon: Timer }, { id: "goals", label: "Weekly Goals", Icon: Target }, { id: "time_log", label: "Time Log", Icon: Clock }, { id: "journal", label: "Journal", Icon: Calendar }, { id: "achievements", label: "Achievements", Icon: Trophy }, { id: "bookmarks", label: "Bookmarks", Icon: Bookmark }, { id: "mock_interview", label: "Mock Interview", Icon: Zap }];
     const navDSA = [{ id: "dsa_dash", label: "Dashboard", Icon: LayoutDashboard }, { id: "dsa_road", label: "Roadmap", Icon: Map }, { id: "dsa_probs", label: "Problems", Icon: Code2 }, { id: "dsa_sched", label: "Schedule", Icon: CalendarDays }, { id: "dsa_prog", label: "Progress", Icon: BarChart3 }, { id: "dsa_res", label: "Resources", Icon: BookOpen }, { id: "flashcards", label: "Flashcards", Icon: Brain }, { id: "interview_qa", label: "Interview Q&A", Icon: Flag }, { id: "patterns", label: "DS Patterns", Icon: Brain }, { id: "pomodoro", label: "Pomodoro", Icon: Timer }, { id: "goals", label: "Weekly Goals", Icon: Target }, { id: "time_log", label: "Time Log", Icon: Clock }, { id: "journal", label: "Journal", Icon: Calendar }, { id: "achievements", label: "Achievements", Icon: Trophy }, { id: "bookmarks", label: "Bookmarks", Icon: Bookmark }, { id: "mock_interview", label: "Mock Interview", Icon: Zap }];
 
-    const Sidebar = () => <div style={{ 
-        width: 190, 
-        background: C.surf, 
-        borderRight: `1px solid ${C.bdr}`, 
-        display: "flex", 
-        flexDirection: "column", 
-        flexShrink: 0, 
-        height: "100vh", 
-        overflowY: "auto", 
-        position: isMobile ? "fixed" : "sticky", 
-        top: 0,
-        left: 0,
-        bottom: 0,
-        zIndex: 1000,
-        transform: isMobile ? (drawerOpen ? "translateX(0)" : "translateX(-100%)") : "none",
-        transition: "transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-        boxShadow: isMobile && drawerOpen ? "5px 0 25px rgba(0,0,0,0.4)" : "none"
-    }}>
-        <div style={{ padding: "14px 14px 10px", borderBottom: `1px solid ${C.bdr}` }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: ac, fontFamily: mono }}>DevPath ⚡</div>
-            <div style={{ fontSize: 9, color: C.txt3, marginTop: 2 }}>Raveend's Learning OS</div>
-        </div>
-        <div style={{ padding: "8px 14px 10px", borderBottom: `1px solid ${C.bdr}` }}>
-            {st.mode === "both" ? <>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontFamily: mono, marginBottom: 3 }}><span style={{ color: C.txt3 }}>📊 DA</span><span style={{ color: C.teal }}>{daPct}%</span></div>
-                <Pbar val={daPct} color={C.teal} h={3} />
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontFamily: mono, marginTop: 6, marginBottom: 3 }}><span style={{ color: C.txt3 }}>💻 DSA</span><span style={{ color: C.lime }}>{dsaPct}%</span></div>
-                <Pbar val={dsaPct} color={C.lime} h={3} />
-            </> : <>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontFamily: mono, marginBottom: 4 }}><span style={{ color: C.txt3 }}>Day {dayNum}/84</span><span style={{ color: ac }}>{pct}%</span></div>
-                <Pbar val={pct} color={ac} h={3} />
-            </>}
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 9, color: C.txt3 }}>
-                <span>🏆 {totalPts} pts</span>
-                <span>🔥 {streak}d streak</span>
+    const Sidebar = () => {
+        const navW = sidebarHidden ? 0 : sidebarIcons ? 64 : 220;
+        return <div style={{
+            width: navW, minWidth: navW, background: C.surf, borderRight: `1px solid ${C.bdr}`,
+            display: "flex", flexDirection: "column", flexShrink: 0, height: "100vh", overflowY: "auto",
+            position: sidebarHidden ? "fixed" : "sticky", top: 0, left: 0, bottom: 0, zIndex: 1000,
+            transform: sidebarHidden ? (drawerOpen ? "translateX(0)" : "translateX(-100%)") : "none",
+            transition: "transform 0.3s cubic-bezier(0.4,0,0.2,1)",
+            boxShadow: sidebarHidden && drawerOpen ? "5px 0 25px rgba(0,0,0,0.4)" : "none",
+        }}>
+            {/* ── Logo ── */}
+            <div style={{ padding: sidebarIcons ? "14px 0 10px" : "14px 14px 10px", borderBottom: `1px solid ${C.bdr}`, textAlign: sidebarIcons ? "center" : "left" }}>
+                <div style={{ fontSize: sidebarIcons ? 22 : 14, fontWeight: 800, color: ac, fontFamily: mono }}>{sidebarIcons ? "⚡" : "DevPath ⚡"}</div>
+                {!sidebarIcons && <div style={{ fontSize: 9, color: C.txt3, marginTop: 2 }}>Raveend's Learning OS</div>}
             </div>
-        </div>
-        {st.mode === "both" && <div style={{ display: "flex", margin: "6px 8px 2px", gap: 4 }}>
-            {[{ id: "da", label: "📊 DA", color: C.teal }, { id: "dsa", label: "💻 DSA", color: C.lime }].map(s => <div key={s.id} onClick={() => { upd({ section: s.id }); setPage(s.id === "da" ? "dashboard" : "dsa_dash"); if (isMobile) setDrawerOpen(false); }} style={{ flex: 1, textAlign: "center", padding: "4px 0", borderRadius: 8, border: `1px solid ${sec === s.id ? s.color : C.bdr2}`, background: sec === s.id ? s.color + "18" : "transparent", color: sec === s.id ? s.color : C.txt3, fontSize: 10, fontWeight: 600, cursor: "pointer" }}>{s.label}</div>)}
-        </div>}
-        <nav style={{ flex: 1, padding: "4px 6px", overflowY: "auto" }}>
-            {(isDSA ? navDSA : navDA).map(({ id, label, Icon }) => <div key={id} onClick={() => { setPage(id); if (isMobile) setDrawerOpen(false); }} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 8, cursor: "pointer", marginBottom: 1, background: page === id ? ac + "15" : "transparent", color: page === id ? ac : C.txt2, fontSize: 11, fontWeight: page === id ? 600 : 400, transition: "all .15s" }}><Icon size={13} />{label}</div>)}
-        </nav>
-        <div style={{ padding: "8px 6px 8px", borderTop: `1px solid ${C.bdr}` }}>
-            <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-                <div onClick={() => upd({ theme: isDark ? "light" : "dark" })} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "5px", borderRadius: 8, cursor: "pointer", background: C.surf2, color: C.txt2, fontSize: 10 }}>{isDark ? <Sun size={11} /> : <Moon size={11} />}{isDark ? "Light" : "Dark"}</div>
-                <div onClick={() => { openSettings(); if (isMobile) setDrawerOpen(false); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "5px", borderRadius: 8, cursor: "pointer", background: C.surf2, color: C.txt2, fontSize: 10 }}><Settings size={11} />Settings</div>
-            </div>
-            <div style={{ fontSize: 9, color: C.txt3, padding: "0 4px", lineHeight: 1.8 }}>Started: {fmtS(startDate)}<br />Target: {fmtS(addD(startDate, 83))}</div>
-        </div>
-    </div>;
+            {/* ── Progress bars (full sidebar only) ── */}
+            {!sidebarIcons && <div style={{ padding: "8px 14px 10px", borderBottom: `1px solid ${C.bdr}` }}>
+                {st.mode === "both" ? <>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontFamily: mono, marginBottom: 3 }}><span style={{ color: C.txt3 }}>📊 DA</span><span style={{ color: C.teal }}>{daPct}%</span></div>
+                    <Pbar val={daPct} color={C.teal} h={3} />
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontFamily: mono, marginTop: 6, marginBottom: 3 }}><span style={{ color: C.txt3 }}>💻 DSA</span><span style={{ color: C.lime }}>{dsaPct}%</span></div>
+                    <Pbar val={dsaPct} color={C.lime} h={3} />
+                </> : <>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontFamily: mono, marginBottom: 4 }}><span style={{ color: C.txt3 }}>Day {dayNum}/84</span><span style={{ color: ac }}>{pct}%</span></div>
+                    <Pbar val={pct} color={ac} h={3} />
+                </>}
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 9, color: C.txt3 }}>
+                    <span>🏆 {totalPts} pts</span>
+                    <span>🔥 {streak}d streak</span>
+                </div>
+            </div>}
+            {/* ── DA / DSA switcher ── */}
+            {st.mode === "both" && <div style={{ display: "flex", margin: sidebarIcons ? "6px 4px 2px" : "6px 8px 2px", gap: 4 }}>
+                {[{ id: "da", icon: "📊", label: "📊 DA", color: C.teal }, { id: "dsa", icon: "💻", label: "💻 DSA", color: C.lime }].map(s => <div key={s.id} onClick={() => { upd({ section: s.id }); setPage(s.id === "da" ? "dashboard" : "dsa_dash"); if (sidebarHidden) setDrawerOpen(false); }} style={{ flex: 1, textAlign: "center", padding: sidebarIcons ? "7px 0" : "4px 0", borderRadius: 8, border: `1px solid ${sec === s.id ? s.color : C.bdr2}`, background: sec === s.id ? s.color + "18" : "transparent", color: sec === s.id ? s.color : C.txt3, fontSize: sidebarIcons ? 16 : 10, fontWeight: 600, cursor: "pointer" }}>{sidebarIcons ? s.icon : s.label}</div>)}
+            </div>}
+            {/* ── Nav items ── */}
+            <nav style={{ flex: 1, padding: sidebarIcons ? "4px 0" : "4px 6px", overflowY: "auto" }}>
+                {(isDSA ? navDSA : navDA).map(({ id, label, Icon }) => <div key={id} title={sidebarIcons ? label : undefined} onClick={() => { setPage(id); if (sidebarHidden) setDrawerOpen(false); }} style={{ display: "flex", alignItems: "center", justifyContent: sidebarIcons ? "center" : "flex-start", gap: sidebarIcons ? 0 : 8, padding: sidebarIcons ? "11px 0" : "7px 8px", borderRadius: sidebarIcons ? 0 : 8, cursor: "pointer", marginBottom: 1, background: page === id ? ac + "15" : "transparent", color: page === id ? ac : C.txt2, fontSize: 11, fontWeight: page === id ? 600 : 400, transition: "all .15s" }}><Icon size={sidebarIcons ? 20 : 13} />{!sidebarIcons && label}</div>)}
+            </nav>
+            {/* ── Bottom controls ── */}
+            {sidebarIcons
+                ? <div style={{ padding: "8px 0 12px", borderTop: `1px solid ${C.bdr}` }}>
+                    <div onClick={() => upd({ theme: isDark ? "light" : "dark" })} title={isDark ? "Light mode" : "Dark mode"} style={{ display: "flex", justifyContent: "center", padding: "10px 0", cursor: "pointer", color: C.txt2 }}>{isDark ? <Sun size={20} /> : <Moon size={20} />}</div>
+                    <div onClick={() => openSettings()} title="Settings" style={{ display: "flex", justifyContent: "center", padding: "10px 0", cursor: "pointer", color: C.txt2 }}><Settings size={20} /></div>
+                </div>
+                : <div style={{ padding: "8px 6px 8px", borderTop: `1px solid ${C.bdr}` }}>
+                    <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                        <div onClick={() => upd({ theme: isDark ? "light" : "dark" })} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "5px", borderRadius: 8, cursor: "pointer", background: C.surf2, color: C.txt2, fontSize: 10 }}>{isDark ? <Sun size={11} /> : <Moon size={11} />}{isDark ? "Light" : "Dark"}</div>
+                        <div onClick={() => { openSettings(); if (sidebarHidden) setDrawerOpen(false); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "5px", borderRadius: 8, cursor: "pointer", background: C.surf2, color: C.txt2, fontSize: 10 }}><Settings size={11} />Settings</div>
+                    </div>
+                    <div style={{ fontSize: 9, color: C.txt3, padding: "0 4px", lineHeight: 1.8 }}>Started: {fmtS(startDate)}<br />Target: {fmtS(addD(startDate, 83))}</div>
+                </div>}
+        </div>;
+    };
 
     const SettingsModal = () => <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999 }} onClick={e => { if (e.target === e.currentTarget) setShowSettings(false); }}>
         <div style={{ background: C.surf, border: `1px solid ${C.bdr2}`, borderRadius: 16, padding: 24, width: 380, maxHeight: "88vh", overflowY: "auto" }}>
@@ -815,7 +830,7 @@ export default function DevPath() {
                 <div style={{ fontSize: 11, color: C.txt3 }}>— {todayQuote.a}</div>
             </Card>
 
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: 8, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: cols("repeat(2,1fr)", "repeat(4,1fr)", "repeat(4,1fr)"), gap: 8, marginBottom: 12 }}>
                 {[{ l: "Progress", v: `${pct}%`, s: `${doneCnt}/84`, c: ac }, { l: "Streak", v: `${streak}d`, s: "🔥 days", c: C.amber }, { l: "Points", v: totalPts, s: `${unlockedAch.length} badges`, c: C.purple }, { l: "Today", v: `${todayDone}/${todayTasks.length}`, s: "tasks done", c: C.coral }].map(m => <div key={m.l} style={{ background: C.surf, border: `1px solid ${C.bdr}`, borderRadius: 12, padding: "10px 8px", textAlign: "center" }}>
                     <div style={{ fontSize: 9, fontWeight: 600, color: C.txt3, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 3 }}>{m.l}</div>
                     <div style={{ fontSize: 18, fontWeight: 700, color: m.c, fontFamily: mono, lineHeight: 1 }}>{m.v}</div>
@@ -829,7 +844,7 @@ export default function DevPath() {
                 <div style={{ display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: C.txt3 }}><span>Started {fmtS(startDate)}</span><span>Target {fmtS(addD(startDate, 83))}</span></div>
             </Card>
 
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: cols("1fr", "1fr 1fr", "1fr 1fr"), gap: 10, marginBottom: 12 }}>
                 <Card style={{ padding: 12 }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: C.txt, marginBottom: 10 }}>Phase Progress</div>
                     {phStats.map(p => <div key={p.id} style={{ marginBottom: 8 }}>
@@ -915,7 +930,7 @@ export default function DevPath() {
             </Card>
             <Card>
                 <div style={{ fontSize: 12, fontWeight: 600, color: C.txt, marginBottom: 10 }}>Session Stats</div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3,1fr)", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: cols("1fr", "repeat(2,1fr)", "repeat(3,1fr)"), gap: 10 }}>
                     {[{ l: "Total Sessions", v: st.pom_total || 0, c: ac }, { l: "Focus Hours", v: ((st.pom_total || 0) * pomMode / 60).toFixed(1) + "h", c: C.purple }, { l: "Current Mode", v: pomMode + "m", c: C.amber }].map(s => <div key={s.l} style={{ textAlign: "center", background: C.surf2, borderRadius: 10, padding: "10px 8px" }}>
                         <div style={{ fontSize: 9, color: C.txt3, marginBottom: 3 }}>{s.l}</div>
                         <div style={{ fontSize: 18, fontWeight: 700, color: s.c, fontFamily: mono }}>{s.v}</div>
@@ -1049,7 +1064,7 @@ export default function DevPath() {
                 <SecLabel>Add New Bookmark</SecLabel>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <input value={newBmUrl} onChange={e => setNewBmUrl(e.target.value)} placeholder="URL (https://...)" style={{ background: C.surf2, border: `1px solid ${C.bdr2}`, borderRadius: 8, padding: "8px 12px", color: C.txt, fontSize: 12, fontFamily: "inherit", outline: "none" }} />
-                    <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 8 }}>
+                    <div style={{ display: "flex", flexDirection: cols("column", "row", "row"), gap: 8 }}>
                         <input value={newBmName} onChange={e => setNewBmName(e.target.value)} placeholder="Name (optional)" style={{ flex: 1, background: C.surf2, border: `1px solid ${C.bdr2}`, borderRadius: 8, padding: "8px 12px", color: C.txt, fontSize: 12, fontFamily: "inherit", outline: "none" }} />
                         <input value={newBmTag} onChange={e => setNewBmTag(e.target.value)} placeholder="Tag (e.g. SQL)" style={{ flex: 1, background: C.surf2, border: `1px solid ${C.bdr2}`, borderRadius: 8, padding: "8px 12px", color: C.txt, fontSize: 12, fontFamily: "inherit", outline: "none" }} />
                         <Btn primary onClick={addBookmark}><Plus size={13} />Add</Btn>
@@ -1170,7 +1185,7 @@ export default function DevPath() {
         return <div style={{ padding: "20px 18px 48px", maxWidth: 680 }}>
             <div style={{ fontSize: 10, fontWeight: 600, color: ac, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 8 }}>Time Tracking</div>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: C.txt, margin: "0 0 18px" }}>Time Log</h1>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3,1fr)", gap: 10, marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: cols("1fr", "repeat(3,1fr)", "repeat(3,1fr)"), gap: 10, marginBottom: 12 }}>
                 {[{ l: "Today", v: todayTotal.toFixed(1) + "h", c: ac }, { l: "Sessions Today", v: todayLog.length, c: C.purple }, { l: "7-Day Total", v: allDays.reduce((s, [, e]) => s + (e.reduce((a, x) => a + x.time, 0)), 0).toFixed(1) + "h", c: C.amber }].map(s => <Card key={s.l} style={{ padding: "12px", textAlign: "center" }}>
                     <div style={{ fontSize: 9, color: C.txt3, marginBottom: 3 }}>{s.l}</div>
                     <div style={{ fontSize: 20, fontWeight: 700, color: s.c, fontFamily: mono }}>{s.v}</div>
@@ -1443,13 +1458,13 @@ export default function DevPath() {
             </div>
             {isDSA && <Card style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: C.txt, marginBottom: 10 }}>Difficulty Breakdown</div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3,1fr)", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: cols("1fr", "repeat(2,1fr)", "repeat(3,1fr)"), gap: 8 }}>
                     {[{ l: "🟢 Easy", c: C.lime, k: "Easy" }, { l: "🟡 Medium", c: C.amber, k: "Medium" }, { l: "🔴 Hard", c: C.coral, k: "Hard" }].map(d => { const dt = tasks.filter(t => t.df && t.df.includes(d.k)); const dn = dt.filter(t => completed[t.id]).length; return <div key={d.k} style={{ background: C.surf2, border: `1px solid ${d.c}25`, borderRadius: 9, padding: "10px 8px", textAlign: "center" }}><div style={{ fontSize: 10, color: d.c, marginBottom: 3 }}>{d.l}</div><div style={{ fontSize: 18, fontWeight: 700, color: d.c, fontFamily: mono, marginBottom: 4 }}>{dn}/{dt.length}</div><Pbar val={dt.length > 0 ? Math.round(dn / dt.length * 100) : 0} color={d.c} h={3} /></div>; })}
                 </div>
             </Card>}
             <Card style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: C.txt, marginBottom: 10 }}>Phase Breakdown</div>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: cols("1fr", "1fr 1fr", "1fr 1fr"), gap: 8 }}>
                     {phStats.map(p => <div key={p.id} style={{ background: C.surf2, border: `1px solid ${C.bdr}`, borderRadius: 9, padding: 10 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}><div style={{ display: "flex", alignItems: "center", gap: 5 }}><span>{p.icon}</span><span style={{ fontSize: 10, fontWeight: 600, color: p.color }}>{p.title}</span></div><span style={{ fontSize: 10, fontWeight: 700, color: p.color, fontFamily: mono }}>{p.pct}%</span></div>
                         <Pbar val={p.pct} color={p.color} h={4} />
@@ -1535,23 +1550,25 @@ export default function DevPath() {
     };
 
     return (
-        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", background: C.bg, minHeight: "100vh", fontFamily: font, color: C.txt }}>
-            {isMobile && <MobileHeader />}
-            {isMobile && drawerOpen && (
-                <div 
-                    style={{ 
-                        position: "fixed", 
-                        inset: 0, 
-                        background: "rgba(0,0,0,.6)", 
+        <div style={{ display: "flex", flexDirection: isPhone ? "column" : "row", background: C.bg, minHeight: "100vh", fontFamily: font, color: C.txt }}>
+            {isPhone && <MobileHeader />}
+            {isPhone && drawerOpen && (
+                <div
+                    style={{
+                        position: "fixed",
+                        inset: 0,
+                        background: "rgba(0,0,0,.6)",
                         backdropFilter: "blur(2px)",
-                        zIndex: 998 
-                    }} 
-                    onClick={() => setDrawerOpen(false)} 
+                        zIndex: 998
+                    }}
+                    onClick={() => setDrawerOpen(false)}
                 />
             )}
             <Sidebar />
-            <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
-                {(pageMap[page] || renderDashboard)()}
+            <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", alignItems: isLargeTablet ? "center" : "stretch" }}>
+                <div style={{ width: "100%", maxWidth: contentMaxW }}>
+                    {(pageMap[page] || renderDashboard)()}
+                </div>
             </main>
             {showSettings && <SettingsModal />}
         </div>
