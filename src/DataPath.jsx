@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { LayoutDashboard, Map, CheckSquare, CalendarDays, BarChart3, CheckCircle2, Clock, ExternalLink, Plus, X, ChevronDown, ChevronRight, Target, ArrowRight, BookOpen, Settings, Calendar, Code2, Search, Zap, Award, Brain, Timer, Sun, Moon, Star, Trophy, Bookmark, Flag, TrendingUp, RefreshCw, Download, Github, Menu } from "lucide-react";
+import { storage } from "./storage.js";
 
 
 const TODAY = new Date().toISOString().split("T")[0];
@@ -472,32 +473,39 @@ export default function DevPath() {
     }, []);
 
     useEffect(() => {
-        try {
-            const raw = localStorage.getItem(SK);
-            if (raw) {
-                const d = JSON.parse(raw);
-                setSt({ ...DEF, ...d });
-                setTempDa(d.da_startDate || TODAY);
-                setTempDsa(d.dsa_startDate || TODAY);
-                setTempMode(d.mode || "both");
-                setTempGithub(d.github_user || "rav3zster");
-                setTempPomLog(d.pom_auto_log || false);
-                setJournalDate(TODAY);
-            }
-        } catch { }
-        setLoaded(true);
+        (async () => {
+            try {
+                const res = await storage.get(SK);
+                if (res?.value) {
+                    const d = JSON.parse(res.value);
+                    setSt({ ...DEF, ...d });
+                    setTempDa(d.da_startDate || TODAY);
+                    setTempDsa(d.dsa_startDate || TODAY);
+                    setTempMode(d.mode || "both");
+                    setTempGithub(d.github_user || "rav3zster");
+                    setTempPomLog(d.pom_auto_log || false);
+                    setJournalDate(TODAY);
+                }
+            } catch { }
+            setLoaded(true);
+        })();
     }, []);
 
     useEffect(() => { setExpandTask(null); setFilterPh(0); setFilterWk(0); setSearch(""); setDiffFilt("All"); setQacat("All"); setQadiff("All"); setQaopen(null); setBmtag("All"); }, [st.section]);
 
     // Define save and upd early so they can be used in useEffect dependency arrays
-    const save = useCallback(ns => { try { localStorage.setItem(SK, JSON.stringify(ns)); } catch { } }, []);
+    // storage.set is fire-and-forget (returns a Promise we don't need to await here)
+    const save = useCallback(ns => { storage.set(SK, JSON.stringify(ns)); }, []);
     const upd = useCallback(patch => setSt(p => { const n = { ...p, ...patch }; save(n); return n; }), [save]);
 
     const pomTaskRef = useRef(pomTask);
     const pomAutoLogRef = useRef(st.pom_auto_log);
     useEffect(() => { pomTaskRef.current = pomTask; }, [pomTask]);
     useEffect(() => { pomAutoLogRef.current = st.pom_auto_log; }, [st.pom_auto_log]);
+
+    // Clear the draft journal text when the user switches to a different date
+    // so the textarea shows the saved entry for the newly selected date (not stale draft)
+    useEffect(() => { setJournalText(""); }, [journalDate]);
 
     // Pomodoro timer
     useEffect(() => {
